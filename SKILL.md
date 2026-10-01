@@ -117,6 +117,10 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 3. **截图是过程产物**，落 `/tmp`；只有**新增的、给用户看的**那张才作为交付呈现，别把中间态全塞进去。
 4. **默认 headless，别碰用户日常 Chrome**。
 5. **用完即关**，别留后台浏览器进程。
+6. **断言挂了先怀疑断言，不是页面。** 写 `--case` 前先用一条探针 `eval` 打印真实取值，再定判据。
+   实测两次翻车都是断言写错：① 模板骨架只放 **2 条**步骤示例，我却按文档断言 `===3`；
+   ② 判「资源全走 assets/」时忘了 `rel="alternate" hreflang` 的 `?lang=zh` 链接本来就不是 assets 路径。
+   断言要**锚长度/字符集**这类稳定特征，别锚示例数量、别锚前缀（掩码 `sk-wb-9b••••` 本身就含 `sk-wb-`）。
 
 ---
 
@@ -133,6 +137,7 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 | 点击没反应 | 交互前先 `snapshot -i` 拿 `@eN` 引用，别猜选择器；元素在视口外时先 `scrollintoview` |
 | 读剪贴板报 `NotAllowedError` | 权限要授到**浏览器级** target（裸 CDP 场景），用 agent-browser 的 `clipboard read` 可绕开 |
 | 页面还没渲染完就截 | 用 `wait --load networkidle` 或 `wait <selector>`，别只 `wait <ms>` |
+| 断言失败但页面看着正常 | 先怀疑断言本身：数量类别照抄文档示例（模板骨架 ≠ 填好的真实页面）；「资源全相对」类要放行 `?query` 形式的 `rel="alternate" hreflang` 链接 |
 | 沙箱里找不到 `agent-browser` | 非交互 shell 的 PATH 不含 managed node bin → 用绝对路径或 `AGENT_BROWSER=` 环境变量（`ui.mjs` 已内置自动定位） |
 | 首次运行下载 Chromium | `npm i -g agent-browser && agent-browser install`（本机已装好） |
 
