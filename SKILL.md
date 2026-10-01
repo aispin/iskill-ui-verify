@@ -121,6 +121,12 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
    实测两次翻车都是断言写错：① 模板骨架只放 **2 条**步骤示例，我却按文档断言 `===3`；
    ② 判「资源全走 assets/」时忘了 `rel="alternate" hreflang` 的 `?lang=zh` 链接本来就不是 assets 路径。
    断言要**锚长度/字符集**这类稳定特征，别锚示例数量、别锚前缀（掩码 `sk-wb-9b••••` 本身就含 `sk-wb-`）。
+7. **「返回成功」不等于「真的做了」。** 已验证两条会**静默返回成功**的路径，共同根因是**目标必须在视口内**：
+   - `screenshot <sel>`：元素在视口外 → 截出纯背景，命令成功、文件也生成了；
+   - `click <sel>`：元素在视口外 → 什么都没发生，命令返回 `{"clicked":"<sel>"}`。
+
+   所以凡是「命令说成功、结果却不对」，**第一件事是量 `el.getBoundingClientRect()` 在不在视口里**，
+   而不是去读源码。这条对 screenshot / click / 任何靠坐标或可见性的操作都适用。
 
 ---
 
@@ -134,8 +140,11 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 | **元素截图截出一片纯背景（命令却返回成功）** | `screenshot <sel>` 内部按**页面坐标**下 clip 但没开 `captureBeyondViewport` → **目标必须在当前视口内**。实测：视口 1180×3200 正常 109 KB，视口 1180×940（元素在视口外）得到 5 KB 纯背景图，且**先 `scrollintoview` 也救不回来**。`ui.mjs --select` 已自动量高度、撑视口、再截；手写 batch 时要自己先 `set viewport w <够高>` |
 | 图里那块区域是空的 | 图片 `loading="lazy"` 在截图那刻还没加载，元素盒子还是「没图时」的高度 → 截图前先 `eval` 把 `img[loading=lazy]` 改成 `eager` 并等 900ms |
 | 整页截图下半部分是空白 | 页面有滚动入场动画（`.reveal{opacity:0}`），没滚到的区块透明 → 给页面加个 `?reveal=all` 之类的直达参数，或把视口撑到能覆盖全页 |
-| 点击没反应 | 交互前先 `snapshot -i` 拿 `@eN` 引用，别猜选择器；元素在视口外时先 `scrollintoview` |
+| **点折叠线以下的元素没反应（命令却报 `clicked`）** | 与「元素截图」同一个根因家族：`click <sel>` **只对当前视口内可见的元素有效**。实测 1200×900 视口、`#cta-copy` 在 y=4147：`click` 返回 `{"clicked":"#cta-copy"}`、`scrollY` 纹丝不动、**监听器根本没触发、无任何报错**。先滚进视口再点就正常。**两种滚法**：① `eval` 里 `el.scrollIntoView({behavior:"instant",block:"center"})`（⚠ 页面若设了 `scroll-behavior:smooth`，默认是**动画**滚动，紧接着点会落空 —— 必须显式 `behavior:"instant"` 或等 500ms）② 直接把视口调高到覆盖目标。判据：点完读一个**必定会变**的 DOM 特征（本页是按钮文案 →「已复制」），别信 `clicked` 返回值 |
+| 点击没反应（其他原因） | 交互前先 `snapshot -i` 拿 `@eN` 引用，别猜选择器 |
+| 合成点击（`el.click()`）能触发但走到「失败」分支 | 缺用户激活（user activation），`navigator.clipboard.writeText` 会被拒 → 降级到 `execCommand` 也返回 false。**这是合成点击的产物，不代表页面有 bug** —— 验复制必须用 `click` 真事件 |
 | 读剪贴板报 `NotAllowedError` | 权限要授到**浏览器级** target（裸 CDP 场景），用 agent-browser 的 `clipboard read` 可绕开 |
+| `clipboard read` / `write` 返回 `null` | 本机 headless 沙箱下这俩子命令**不可用**（先 `clipboard write x` 再 `read` 也是 null）。要验「复制到底写了什么」，改用 `eval` 拦一份 `navigator.clipboard.writeText` 的入参：`window.__copied=null;(()=>{const o=navigator.clipboard.writeText.bind(navigator.clipboard);navigator.clipboard.writeText=t=>{window.__copied=t;return o(t)};return true})()`，点完读 `window.__copied` |
 | 页面还没渲染完就截 | 用 `wait --load networkidle` 或 `wait <selector>`，别只 `wait <ms>` |
 | 断言失败但页面看着正常 | 先怀疑断言本身：数量类别照抄文档示例（模板骨架 ≠ 填好的真实页面）；「资源全相对」类要放行 `?query` 形式的 `rel="alternate" hreflang` 链接 |
 | 沙箱里找不到 `agent-browser` | 非交互 shell 的 PATH 不含 managed node bin → 用绝对路径或 `AGENT_BROWSER=` 环境变量（`ui.mjs` 已内置自动定位） |

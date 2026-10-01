@@ -52,6 +52,22 @@ JSON
 
 `snapshot -i` 会打印 `@eN` 引用表，**照着表点**，别猜 CSS 选择器——这是省掉最多重试的一步。点完页面变了要重新 `snapshot -i`，旧 ref 会失效。
 
+> ⚠️ **`click` 只对当前视口内的元素有效**（和 `screenshot <sel>` 同一个根因家族）。
+> 折叠线以下的按钮会**静默落空**：命令返回 `{"clicked":"…"}`，`scrollY` 不动，监听器根本不触发，零报错。
+> 实测 1200×900 视口点 y=4147 的按钮 —— 没反应；先滚进视口再点就正常。两条解法：
+>
+> ```json
+> ["eval", "document.querySelector('SEL').scrollIntoView({behavior:'instant',block:'center'})"],
+> ["wait", "400"],
+> ["click", "#sel"]
+> ```
+>
+> 或者干脆把视口调高到覆盖目标（`["set","viewport","1180","2000","1"]`）。
+> **`behavior:"instant"` 不能省**：页面若设了 `scroll-behavior:smooth`，默认走的是**动画**滚动，
+> 紧接着点击会落空（且 `getBoundingClientRect()` 立刻读到的还是旧位置，看起来像"没滚动"）。
+>
+> 判据别用 `clicked` 返回值，要读**点完必定会变的 DOM 特征**（按钮文案、`aria-expanded`、列表项数量）。
+
 ---
 
 ## 3. 剪贴板验证（"复制按钮真的复制到了吗"）
@@ -72,6 +88,20 @@ JSON
 ```
 
 再加一条 `check` 断言读回值等于期望字符串，才算闭环。（跨源 iframe 里 `navigator.clipboard` 会被权限策略拒，页面侧的降级链见 iskill-headroom-workbuddy 的踩坑笔记。）
+
+> ⚠️ 本机 headless 环境下 **`clipboard read` / `clipboard write` 都返回 `null`**（先 `write x` 再 `read` 也是 null，不是页面问题）。
+> 此时改用**拦截入参**验：在读回之前先打探针，再读 `window.__copied`：
+>
+> ```json
+> ["eval", "window.__copied=null;(()=>{const o=navigator.clipboard.writeText.bind(navigator.clipboard);navigator.clipboard.writeText=t=>{window.__copied=t;return o(t)};return true})()"],
+> ["click", "#copy-btn"],
+> ["wait", "350"],
+> ["eval", "window.__copied"]
+> ```
+>
+> 探针**放行原调用**（`o(t)`），所以「按钮反馈显示成功」与「写进去的值是什么」两条信息都拿得到。
+> 反过来：`eval` 里的 `el.click()` 是**合成点击**，没有用户激活 → `writeText` 被拒、降级到 `execCommand` 也回 false，
+> 界面会显示「复制失败」。**那是合成的产物，不是页面 bug** —— 验复制必须用真 `click` 命令。
 
 ---
 

@@ -31,6 +31,34 @@
     return null;
   }
 
+  /* ── 安装方式：交给 agent，而不是让用户抄命令 ────────────────────────
+   *
+   * 一键复制的是「说给 AI 听的一句话」，不是 `git clone …`。原因：
+   *  · 技能装在哪（~/.workbuddy/skills/、.claude/skills/…）取决于用户用哪个 agent，
+   *    写死路径等于替用户做了错决定；
+   *  · agent 装完能顺手读 SKILL.md 讲用法，比用户自己翻 README 快得多；
+   *  · 手抄长 URL 容易错一个字符。
+   *
+   * 提示词默认由 repo 推导，逐技能可用 installPrompt:{zh,en} 覆盖；
+   * 模板里可写 {repo} / {repoShort}（owner/name）/ {name} 占位符。
+   */
+  var PROMPT = {
+    zh: "请帮我安装 Skill：{repo}，并告诉我它的用法",
+    en: "Install this skill: {repo} and tell me how to use it"
+  };
+  function repoShort() {
+    return (P.repoLabel ||
+      String(P.repo || "").replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "") || "GitHub");
+  }
+  function installPrompt(lang) {
+    var ov = P.installPrompt;
+    var tpl = (ov && (ov[lang] || ov.zh)) || PROMPT[lang] || PROMPT.zh;
+    return String(tpl)
+      .replace(/\{repo\}/g, P.repo || "")
+      .replace(/\{repoShort\}/g, repoShort())
+      .replace(/\{name\}/g, P.name || repoShort());
+  }
+
   /* ── ① 主题 ───────────────────────────────────────────────────────── */
   var mql = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   function systemTheme() { return mql && mql.matches ? "dark" : "light"; }
@@ -67,6 +95,11 @@
   /* ── ③ 渲染 ───────────────────────────────────────────────────────── */
   function get(obj, path) {
     return path.split(".").reduce(function (o, k) { return o == null ? o : o[k]; }, obj);
+  }
+
+  function uiText(dict, key, fallback) {
+    var v = get(dict, "ui." + key);
+    return typeof v === "string" && v ? v : fallback;
   }
 
   function applyText(dict) {
@@ -157,29 +190,45 @@
     });
   }
 
-  function renderSteps(data) {
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  }
+
+  /* 复制按钮的文案（随语言变），由 render() 每次刷新 */
+  var UI = { copy: "复制", copied: "已复制", failed: "复制失败" };
+
+  function renderSteps(data, lang) {
     if (!data) return;
     var box = qs("#how .list"); /* 注意：section 的 id 是 #how，别写成 #steps */
     if (!box) return;
     box.innerHTML = "";
     (data.items || []).forEach(function (s, i) {
+      /* codeKey: "install" → 用推导出来的安装提示词，别在 content.js 里抄一遍 URL */
+      var isPrompt = s.codeKey === "install";
+      var codeText = isPrompt ? installPrompt(lang) : s.code;
       var wrap = el("div", "step reveal");
       var num = el("div", "num", String(i + 1));
       var body = el("div", "body");
       body.appendChild(el("h3", null, s.title));
       body.appendChild(el("p", null, s.desc));
-      if (s.code) {
-        var code = el("div", "code");
+      if (codeText) {
+        var code = el("div", "code" + (isPrompt ? " code-prompt" : ""));
         var head = el("div", "code-head");
-        head.appendChild(el("span", "name", s.codeName || "shell"));
+        head.appendChild(el("span", "name", s.codeName || (isPrompt ? "prompt" : "shell")));
         var btn = el("button", "code-copy");
         btn.type = "button";
-        btn.dataset.copy = s.code;
-        btn.innerHTML = icon("copy") + "<span>复制</span>";
+        btn.dataset.copy = codeText;
+        btn.innerHTML = icon("copy") + "<span>" + UI.copy + "</span>";
         head.appendChild(btn);
         code.appendChild(head);
         var pre = el("pre");
-        pre.innerHTML = s.code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/(#[^\n]*)/g, '<span class="c">$1</span>');
+        if (isPrompt) {
+          /* 提示词不是 shell：不做 # 注释着色（否则 URL 里出现 # 会被整段染色），
+             长 URL 靠 CSS 换行而不是横向滚动 */
+          pre.textContent = codeText;
+        } else {
+          pre.innerHTML = esc(codeText).replace(/(#[^\n]*)/g, '<span class="c">$1</span>');
+        }
         code.appendChild(pre);
         body.appendChild(code);
       }
@@ -224,9 +273,7 @@
 
   function paintLinks() {
     var repo = P.repo || "#";
-    var label =
-      P.repoLabel ||
-      (repo === "#" ? "GitHub" : repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, ""));
+    var label = repoShort();
     [["#repo-link", repo], ["#hero-repo", repo], ["#cta-repo", repo], ["#footer-repo", repo]]
       .forEach(function (p) { var n = qs(p[0]); if (n) n.href = p[1]; });
     var lb = qs("#repo-label");
@@ -234,26 +281,36 @@
     // 窄屏下仓库名会被 CSS 收起（只留图标）→ 用 aria-label 顶住可访问名称
     var rl = qs("#repo-link");
     if (rl) rl.setAttribute("aria-label", "GitHub · " + label);
-    [["#hero-copy", P.install], ["#cta-copy", P.install]].forEach(function (p) {
-      var n = qs(p[0]);
-      if (n && p[1]) n.setAttribute("data-copy", p[1]);
-    });
     if (P.name) {
       var fn = qs("#footer-name");
       if (fn) fn.textContent = P.name;
     }
   }
 
+  /* 复制目标是语言相关的（提示词要换语言），所以每次 render 都重刷一次 */
+  function paintCopyTargets(lang) {
+    var text = installPrompt(lang);
+    [qs("#hero-copy"), qs("#cta-copy")].forEach(function (n) {
+      if (n) n.setAttribute("data-copy", text);
+    });
+  }
+
   function render(lang) {
     var dict = (P.lang && (P.lang[lang] || P.lang.zh)) || {};
+    UI = {
+      copy: uiText(dict, "copy", "复制"),
+      copied: uiText(dict, "copied", "已复制"),
+      failed: uiText(dict, "failed", "复制失败")
+    };
     applyText(dict);
     renderTerminal((dict.terminal || {}).title, (dict.terminal || {}).lines);
     renderStats(dict.stats);
     renderCompare(dict.compare);
     renderFeatures(dict.features);
     renderShowcase(dict.showcase);
-    renderSteps(dict.steps);
+    renderSteps(dict.steps, lang);
     renderFaq(dict.faq);
+    paintCopyTargets(lang);
     html.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
     if (dict.meta) {
       document.title = dict.meta.title || document.title;
@@ -296,13 +353,19 @@
       var btn = e.target.closest ? e.target.closest("[data-copy]") : null;
       if (!btn) return;
       var text = btn.getAttribute("data-copy");
+      if (!text) return;
       var label = btn.querySelector("span");
+      /* 先记住原文案再改成反馈 —— 否则「复制安装提示词」这类标签会被永久覆盖成「复制」 */
+      var original = label ? label.textContent : "";
       copyText(text).then(function (ok) {
+        var tmp = ok ? UI.copied : UI.failed;
         btn.classList.toggle("done", !!ok);
-        if (label) label.textContent = ok ? "已复制" : "复制失败";
+        if (label) label.textContent = tmp;
         setTimeout(function () {
           btn.classList.remove("done");
-          if (label) label.textContent = "复制";
+          /* 只在标签还停在反馈文案时才还原：期间切了语言的话，
+             它已被 applyText 换成新语言的原文案，别再用旧语言盖回去 */
+          if (label && label.textContent === tmp) label.textContent = original;
         }, 1600);
       });
     });

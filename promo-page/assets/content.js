@@ -8,8 +8,6 @@ window.PROMO = {
   brand2: "#22d3ee",
   repo: "https://github.com/aispin/iskill-ui-verify",
   repoLabel: "aispin/iskill-ui-verify",
-  install: "git clone https://github.com/aispin/iskill-ui-verify.git ~/.workbuddy/skills/iskill-ui-verify",
-
   lang: {
     /* ── 中文 ───────────────────────────────────────────────────────── */
     zh: {
@@ -18,15 +16,16 @@ window.PROMO = {
         description: "让 agent 用一行命令完成网页截图与 UI 验证：变体矩阵、元素裁剪、DOM 断言、退出码。底层复用 agent-browser，零 npm 依赖。"
       },
       a11y: { skip: "跳到主要内容" },
+      ui: { copy: "复制", copied: "已复制", failed: "复制失败" },
       nav: { features: "能力", shots: "截图", how: "上手", faq: "问答" },
 
       hero: {
-        badge: "WorkBuddy 技能",
+        badge: "AI 技能",
         titlePre: "把「截图验证」",
         titleAccent: "压成一行命令",
         titlePost: "",
         sub: "变体矩阵截图、元素级裁剪、DOM 断言、退出码——底层复用已装好的 agent-browser（自带 Chromium、零 npm 依赖），默认 headless，不碰你日常的 Chrome。",
-        ctaPrimary: "复制安装命令",
+        ctaPrimary: "复制安装提示词",
         ctaSecondary: "看源码",
         meta1: "零 npm 依赖",
         meta2: "默认 headless",
@@ -93,10 +92,9 @@ window.PROMO = {
         sub: "",
         items: [
           {
-            title: "拿到它",
-            desc: "克隆到技能目录（或用 SkillHub 安装）。",
-            codeName: "bash",
-            code: "# 克隆到技能目录\ngit clone https://github.com/aispin/iskill-ui-verify.git ~/.workbuddy/skills/iskill-ui-verify"
+            title: "交给 AI 装",
+            desc: "把提示词粘进对话框，agent 会自己拉代码、读文档，再告诉你怎么跑。",
+            codeKey: "install"
           },
           {
             title: "跑一次矩阵截图",
@@ -117,6 +115,7 @@ window.PROMO = {
         eyebrow: "问答",
         title: "常见问题",
         items: [
+          { q: "能不能不用 AI，手动装？", a: "可以。clone 到你的 agent 技能目录（如 <code>~/.workbuddy/skills/</code>）即可；技能是纯文本加脚本，没有构建步骤。" },
           { q: "和 browser-cdp 技能有什么区别？", a: "browser-cdp 用来复用你真实浏览器的登录态（会杀掉 Chrome、需你同意）；本技能默认起独立 headless 实例，专做本地页面的视觉验收。" },
           { q: "页面还没渲染完就截了怎么办？", a: "用 wait --load networkidle，或直接等某个选择器出现，别只等固定毫秒数。" },
           { q: "要在跨源 iframe 里验证剪贴板？", a: "iframe 里 navigator.clipboard 会被权限策略拒，页面侧要做三层降级；校验侧用 agent-browser 的 clipboard read 读回值再断言。" },
@@ -128,7 +127,7 @@ window.PROMO = {
         title: "下次改完 UI，别再手写 CDP",
         desc: "一行 shots 出图，一行 check 出结论。",
         primary: "去 GitHub 看看",
-        secondary: "复制安装命令"
+        secondary: "复制安装提示词"
       },
       footer: { license: "MIT 许可", madeWith: "由 iskill-promo-page 生成" }
     },
@@ -140,15 +139,16 @@ window.PROMO = {
         description: "Let agents verify web UI in one command: variant matrix shots, element crops, DOM assertions, meaningful exit codes. Built on agent-browser — zero npm dependencies."
       },
       a11y: { skip: "Skip to content" },
+      ui: { copy: "Copy", copied: "Copied", failed: "Copy failed" },
       nav: { features: "Features", shots: "Screens", how: "Get started", faq: "FAQ" },
 
       hero: {
-        badge: "WorkBuddy skill",
+        badge: "AI skill",
         titlePre: "Turn UI verification into ",
         titleAccent: "one command",
         titlePost: "",
         sub: "Variant-matrix screenshots, element crops, DOM assertions and real exit codes — on top of agent-browser (bundled Chromium, zero npm deps). Headless by default, and it never touches the Chrome you are using.",
-        ctaPrimary: "Copy install command",
+        ctaPrimary: "Copy install prompt",
         ctaSecondary: "View source",
         meta1: "No npm deps",
         meta2: "Headless by default",
@@ -215,10 +215,9 @@ window.PROMO = {
         sub: "",
         items: [
           {
-            title: "Get it",
-            desc: "Clone it into your skills directory (or install via SkillHub).",
-            codeName: "bash",
-            code: "# clone into the skills dir\ngit clone https://github.com/aispin/iskill-ui-verify.git ~/.workbuddy/skills/iskill-ui-verify"
+            title: "Let your agent install it",
+            desc: "Paste the line into the chat — it clones the repo, reads the docs, and tells you how to run it.",
+            codeKey: "install"
           },
           {
             title: "Take the matrix",
@@ -239,6 +238,7 @@ window.PROMO = {
         eyebrow: "FAQ",
         title: "Frequently asked",
         items: [
+          { q: "Can I install it without an agent?", a: "Sure. Clone it into your agent's skills directory (e.g. <code>~/.workbuddy/skills/</code>) — plain text and scripts, no build step." },
           { q: "How is this different from the browser-cdp skill?", a: "browser-cdp reuses the login session of the Chrome you already run (it kills it, with your consent). This skill launches its own headless instance for local visual checks." },
           { q: "The page was still rendering when it shot.", a: "Wait with wait --load networkidle, or wait for a specific selector — not a fixed number of milliseconds." },
           { q: "Verifying the clipboard inside a cross-origin iframe?", a: "navigator.clipboard is blocked by permission policy inside iframes, so the page needs a fallback chain; verify with agent-browser's clipboard read and assert on the value." },
@@ -250,7 +250,7 @@ window.PROMO = {
         title: "Next time you touch the UI, skip the CDP script",
         desc: "One shots call for images, one check call for answers.",
         primary: "Open on GitHub",
-        secondary: "Copy install command"
+        secondary: "Copy install prompt"
       },
       footer: { license: "MIT licensed", madeWith: "Built with iskill-promo-page" }
     }
