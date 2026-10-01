@@ -142,17 +142,22 @@ code, pre, kbd { font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Co
   transition: border-color 0.25s, background 0.25s;
 }
 .topbar.scrolled { border-bottom-color: var(--line); }
-.topbar .wrap { display: flex; align-items: center; gap: 14px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; min-width: 0; }
+/* 顶栏是一行「不换行」的 flex。宽度不够时谁退让，必须由收缩优先级显式决定 ——
+   否则浏览器按各元素的 min-content 均摊缺口：.brand 因为写了 min-width:0 被一路压到
+   0 宽，.nav a 没写 nowrap 就在词中间折行（「Get / started」），而带 nowrap 的仓库
+   胶囊反而几乎不可压缩。下面的规则把优先级钉死：控件不动 → 导航不动 → 品牌最后退。 */
+.topbar .wrap { display: flex; align-items: center; flex-wrap: nowrap; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; min-width: 0; flex: 0 1 auto; }
 .brand img, .brand svg { width: 26px; height: 26px; border-radius: 8px; flex: none; }
 .brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; }
-.nav { display: flex; align-items: center; gap: 4px; margin-left: 12px; }
+.nav { display: flex; align-items: center; gap: 4px; margin-left: 12px; flex: 0 0 auto; }
 .nav a {
   padding: 7px 11px; border-radius: 9px; font-size: 13.5px; color: var(--ink-2);
+  white-space: nowrap; /* 标签绝不折行 —— 折行还会把 36px 的链接撑到 59px，顶破顶栏 */
   transition: color 0.18s, background 0.18s;
 }
 .nav a:hover { color: var(--ink); background: var(--panel); }
-.spacer { flex: 1 1 auto; }
+.spacer { flex: 1 1 auto; min-width: 0; }
 
 /* ── 控件 ────────────────────────────────────────────────────────────── */
 .btn {
@@ -173,11 +178,16 @@ code, pre, kbd { font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Co
 }
 .btn-primary:hover { box-shadow: 0 18px 38px -14px color-mix(in srgb, var(--brand) 90%, transparent); }
 .btn-sm { height: 34px; padding: 0 12px; font-size: 13px; border-radius: 9px; }
-.btn-icon { width: 34px; height: 34px; padding: 0; border-radius: 10px; position: relative; }
+.btn-icon { width: 34px; height: 34px; padding: 0; border-radius: 10px; position: relative; flex: none; }
 .btn-icon .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
+/* 仓库胶囊：唯一「允许被压」的控件。min-width:0 + 内层 ellipsis 让它能先截断长仓库名，
+   而不是像其他 .btn 那样靠 nowrap 撑着不动。窄屏下彻底收起文字（见响应式节）。 */
+.btn-repo { flex: 0 1 auto; min-width: 0; }
+.btn-repo .repo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
 .seg {
-  display: inline-flex; align-items: center; height: 34px; padding: 3px;
+  display: inline-flex; align-items: center; height: 34px; padding: 3px; flex: none;
   border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel);
 }
 .seg button {
@@ -382,6 +392,28 @@ footer .sep { opacity: 0.45; }
 .reveal.in.d2 { transition-delay: 0.16s; }
 .reveal.in.d3 { transition-delay: 0.24s; }
 
+/* ── 顶栏降级阶梯 ──────────────────────────────────────────────────────
+   按「信息价值从低到高」依次收，每档只做一件事。数值不是拍脑袋：按当前
+   brand(273) + nav(302) + seg(79) + theme(34) + repo(268) + gap(14×5) = 1026，
+   加上 .wrap 左右各 22px 内边距 ⇒ 视口 ≈1070px 是顶栏的自然临界点。 */
+@media (max-width: 1080px) {
+  #repo-label { max-width: 80px; }        /* 第一档：长仓库名先截断成「aispin/isk…」 */
+}
+@media (max-width: 960px) {
+  .topbar .wrap { gap: 10px; }            /* 第二档：整体收紧间距与导航内边距 */
+  .nav { margin-left: 4px; gap: 2px; }
+  .nav a { padding: 7px 9px; font-size: 13px; }
+}
+@media (max-width: 900px) {
+  /* 第三档：仓库名退场，只留 GitHub 图标（与主题按钮同款的 34px 方块）。
+     必须 flex:none —— 否则它继承基类的 min-width:0，图标会被压成 28px 的扁条。 */
+  #repo-label { display: none; }
+  .btn-repo { flex: none; width: 34px; height: 34px; padding: 0; border-radius: 10px; }
+}
+@media (max-width: 560px) {
+  .brand span { display: none; }          /* 第五档：手机只留 logo，不显示半截品牌名 */
+}
+
 /* ── 响应式 ──────────────────────────────────────────────────────────── */
 @media (max-width: 1000px) {
   .features .grid { grid-template-columns: repeat(2, 1fr); }
@@ -390,7 +422,7 @@ footer .sep { opacity: 0.45; }
 }
 @media (max-width: 720px) {
   section { padding: 56px 0; }
-  .nav { display: none; }
+  .nav { display: none; }                 /* 第四档：导航整体藏起（锚点仍可滚动到达） */
   .stats .grid, .compare .grid, .features .grid { grid-template-columns: 1fr; }
   .step { grid-template-columns: 38px 1fr; gap: 13px; }
   .step .num { width: 38px; height: 38px; border-radius: 12px; font-size: 15px; }

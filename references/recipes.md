@@ -118,6 +118,35 @@ $AB set media light                     # 强制浅色（验证深色模式下�
 
 页面若用 `prefers-color-scheme` 而不是 URL 参数切主题，就用 `ui.mjs shots --matrix "media=light,dark"`。
 
+> ⚠️ 无头 Chromium 的 `prefers-color-scheme` 默认是 **dark**。所以「不传 theme 参数的浅色图」其实是深色图 ——
+> 页面若同时支持 `?theme=` 就用 URL 参数明确指定，别指望默认值是浅色。
+
+### 7.1 多断点退化检查（布局别在某档宽度突然崩）
+
+布局坏掉通常不是「全坏」，而是**只在某个宽度区间坏** —— 单测一个宽度必然漏。做法是扫一排宽度，
+每个宽度只跑三条**互相独立**的断言：
+
+```bash
+for W in 1440 1160 1080 960 900 820 730 640 560 480 390; do
+  echo "--- $W ---"
+  $N ui.mjs check --url "$URL" --width $W --height 900 --scale 1 --wait 2200 \
+    --case "无横向滚动=document.documentElement.scrollWidth<=document.documentElement.clientWidth+1" \
+    --case "无元素溢出=![...document.querySelectorAll('header *,.nav a')].some(e=>{const r=e.getBoundingClientRect();return r.right>innerWidth+1||r.left<-1})" \
+    --case "文本未塌缩=!(document.body.innerText.trim().length===0)"
+done
+```
+
+三条断言对应三类独立故障，不能互相替代：
+
+| 断言 | 抓的是 | 漏掉会怎样 |
+|---|---|---|
+| `无横向滚动` | 有元素既不可压缩又不肯让位 | 页面多出横向滚动条 |
+| `无元素溢出` | 元素被挤到视口外 | 溢出但被 `overflow:hidden` 吃掉，滚动条查不出来 |
+| 尺寸/高度断言（如 `getBoundingClientRect().height < 44`） | 文字折行把盒子撑高 | 没有溢出、也不出滚动条，但排版已经乱了 |
+
+**只扫宽度不看截图也是不够的**：断言只能证明「没错到某个程度」。两者都要 —— 断言定责、截图定观感。
+把各宽度截成一张总览图（生成一个本地 HTML 用 `<img>` 拼起来再 `--full` 截）能一眼看完十几档。
+
 ---
 
 ## 8. 需要用户的登录态

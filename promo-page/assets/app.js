@@ -224,11 +224,16 @@
 
   function paintLinks() {
     var repo = P.repo || "#";
-    var label = P.repoLabel || repo.replace(/^https?:\/\/github\.com\//, "");
+    var label =
+      P.repoLabel ||
+      (repo === "#" ? "GitHub" : repo.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, ""));
     [["#repo-link", repo], ["#hero-repo", repo], ["#cta-repo", repo], ["#footer-repo", repo]]
       .forEach(function (p) { var n = qs(p[0]); if (n) n.href = p[1]; });
     var lb = qs("#repo-label");
-    if (lb && P.repoLabel) lb.textContent = P.repoLabel;
+    if (lb) lb.textContent = label;
+    // 窄屏下仓库名会被 CSS 收起（只留图标）→ 用 aria-label 顶住可访问名称
+    var rl = qs("#repo-link");
+    if (rl) rl.setAttribute("aria-label", "GitHub · " + label);
     [["#hero-copy", P.install], ["#cta-copy", P.install]].forEach(function (p) {
       var n = qs(p[0]);
       if (n && p[1]) n.setAttribute("data-copy", p[1]);
