@@ -148,7 +148,15 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 | 页面还没渲染完就截 | 用 `wait --load networkidle` 或 `wait <selector>`，别只 `wait <ms>` |
 | 断言失败但页面看着正常 | 先怀疑断言本身：数量类别照抄文档示例（模板骨架 ≠ 填好的真实页面）；「资源全相对」类要放行 `?query` 形式的 `rel="alternate" hreflang` 链接 |
 | 沙箱里找不到 `agent-browser` | 非交互 shell 的 PATH 不含 managed node bin → 用绝对路径或 `AGENT_BROWSER=` 环境变量（`ui.mjs` 已内置自动定位） |
+| **改完 CSS 重开页面，量到的还是旧规则** | **`file://` 页面也会被 Chromium 缓存**。实测：源文件里明明写着 `flex-basis:150px`，页面里读回来还是 `168px`，于是照着假的数验收了一轮。破法：URL 加 `?v=<时间戳>`（`#` 后面的 hash 参数**不破缓存**，必须是查询串） |
+| **`open` 之后页面里靠 `location.hash` 判断的逻辑静默失效** | `agent-browser open <url>#xxx` 是**先导航、再把 fragment 补上**：脚本执行那一刻 `location.hash` 还是空的。实测页面里的 `#pop=1` 直达弹层不生效——`location.hash` 后来明明是 `#pop=1`、正则也 `true`，弹层却没开。页面侧要**同时监听 `hashchange`**；验收侧可改用 `eval` 手动 `click` 触发，别把赌注押在 hash 上 |
+| **量 `getBoundingClientRect()` 差个 2px，别急着当 bug** | 点完/截完，合成鼠标常常**停在目标元素上**，`:hover{transform:translateY(-2px)}` 这类效果就生效了。实测 `.qrs` 三张卡 `top` 读到 `374/376/376`，差点判成「折行了」。判「几行」要**排序后数「相邻差 > 4px」的断层**，或量之前先把鼠标挪开 |
 | 首次运行下载 Chromium | `npm i -g agent-browser && agent-browser install`（本机已装好） |
+
+> **agent-browser 在受限沙箱里比直接 exec Chromium 更能活**：它把浏览器 daemon 化，
+> 而直接 `execFileSync('…/Google Chrome')` 会被沙箱把**整棵进程树**一起回收
+> （退出码 137，宿主脚本连 `catch` 都没机会跑）。所以凡是「文档/验收脚本自己起浏览器」，
+> 要么直接用它，要么**在起进程之前就判断**该走哪条路，别指望运行时兜底。
 
 ---
 
