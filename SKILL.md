@@ -141,3 +141,12 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 ## 六、延伸配方
 
 交互后再截图、剪贴板验证、视觉回归 diff、console 报错巡检、给多模态模型看的 `--annotate` 标注图等，见 `references/recipes.md`。
+
+## 七、本技能的落地页
+
+`promo-page/` 是这个技能自己的推广页（用 `iskill-promo-page` 生成，紫青配色，实拍区就是本技能自拍的产物）。
+发布方式见 [`iskill-promo-page/references/deploy-modes.md`](../iskill-promo-page/references/deploy-modes.md)，
+一条命令配好：`bash <promo-page>/scripts/pages.sh workflow aispin/iskill-ui-verify --apply`。
+
+> ⚠️ 若不想用 GitHub Actions：Pages 分支模式**只能选 `/` 或 `/docs`**，选不了 `promo-page/`；
+> 要么继续用仓库里已备好的 `.github/workflows/promo-page.yml`，要么把目录改名成 `docs/`。
