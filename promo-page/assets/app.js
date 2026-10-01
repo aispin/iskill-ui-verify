@@ -80,6 +80,8 @@
       btn.setAttribute("aria-label", theme === "dark" ? "切换到浅色" : "切换到深色");
       btn.dataset.theme = theme;
     }
+    /* 槽位里嵌的页面也要跟着换肤（走 postMessage，不重载 iframe） */
+    syncSlotFrames();
   }
 
   /* ── ② 语言 ───────────────────────────────────────────────────────── */
@@ -196,6 +198,8 @@
 
   /* 复制按钮的文案（随语言变），由 render() 每次刷新 */
   var UI = { copy: "复制", copied: "已复制", failed: "复制失败" };
+  /* 当前语言：槽位里的 iframe 在 load / 切主题时要拿它回推给子页 */
+  var LANG = "zh";
 
   function renderSteps(data, lang) {
     if (!data) return;
@@ -271,6 +275,81 @@
     });
   }
 
+  /* ── 槽位（可插拔扩展点） ──────────────────────────────────────────────
+   *
+   * 骨架里声明 <div class="slot" data-slot="名字">，这里按 content.js 的
+   * slots[名字] 往里填。两种形态：
+   *   html   —— 一段内联 HTML（可写成 {zh, en} 双语，切语言跟着换）
+   *   iframe —— 嵌一个自包含页面（如 usage.html）
+   *
+   * 「跟随宿主」刻意分成两条通道，各管一段：
+   *   · 首次加载 → 把当前 lang/theme 拼进 src 的 hash。hash 在子页自己的头脚本里
+   *     **最先**被读到，没有「监听器还没绑上」的竞态（这套在
+   *     iskill-generate-sponsors 的 index.html ↔ sponsors.html 之间已经踩过一遍）。
+   *   · 之后切换 → postMessage 推给子页，**不重载 iframe** —— 重载会丢子页状态
+   *     （用户可能已经切到某个 tab），还会闪一下。
+   *   · 子页 load 完再推一次，兜住「切语言早于子页 boot」那一瞬。
+   * 子页认不认这两条通道由它自己决定：不认只是不跟随，不会报错。
+   */
+  function slotText(v, lang) {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    return v[lang] || v.zh || v.en || "";
+  }
+
+  function currentTheme() { return html.classList.contains("dark") ? "dark" : "light"; }
+
+  /* 子页若认这套协议，就能跟着宿主切主题/语言而不重载 */
+  function syncSlot(f, lang) {
+    if (!f || f.getAttribute("data-sync") === "off") return;
+    try {
+      f.contentWindow.postMessage({ promoSlotSync: { lang: lang, theme: currentTheme() } }, "*");
+    } catch (e) { /* 跨源 / 子页已销毁：静默即可 */ }
+  }
+  function syncSlotFrames() {
+    var fs = document.querySelectorAll("iframe.slot-frame");
+    [].forEach.call(fs, function (f) { syncSlot(f, f.getAttribute("data-lang") || LANG); });
+  }
+
+  function renderSlots(lang) {
+    var slots = P.slots || {};
+    var hosts = document.querySelectorAll("[data-slot]");
+    [].forEach.call(hosts, function (host) {
+      var name = host.getAttribute("data-slot");
+      var cfg = slots[name];
+
+      /* 没配置：清空 → :empty 命中 display:none。整块消失，且不占网格行，
+         所以「加了锚点但没配内容」的老页面视觉上零变化。 */
+      if (!cfg) { if (host.firstChild) host.innerHTML = ""; return; }
+
+      if (cfg.iframe) {
+        var f = host.querySelector("iframe.slot-frame");
+        if (!f) {
+          host.innerHTML = "";
+          f = el("iframe", "slot-frame");
+          f.setAttribute("loading", "lazy");
+          if (cfg.iframe.height) f.style.setProperty("--slot-h", cfg.iframe.height + "px");
+          if (cfg.iframe.sync === false) f.setAttribute("data-sync", "off");
+          f.addEventListener("load", function () { syncSlot(f, f.getAttribute("data-lang") || LANG); });
+          /* 主题/语言走 hash：首帧就一致（postMessage 赶不上子页的头脚本） */
+          var h = cfg.iframe.sync === false ? "" : "#lang=" + lang + "&theme=" + currentTheme();
+          f.src = cfg.iframe.src + h;
+          host.appendChild(f);
+        } else {
+          syncSlot(f, lang); /* 只推消息，不重载 */
+        }
+        f.setAttribute("data-lang", lang);
+        f.setAttribute("title", slotText(cfg.iframe.title, lang) || name);
+        return;
+      }
+
+      /* html 形态：双语时切语言会重渲染 */
+      if (typeof cfg.html !== "undefined") {
+        host.innerHTML = '<div class="slot-html">' + slotText(cfg.html, lang) + "</div>";
+      }
+    });
+  }
+
   function paintLinks() {
     var repo = P.repo || "#";
     var label = repoShort();
@@ -295,6 +374,55 @@
     });
   }
 
+  /* ── 平台兼容性标签（Hero 标题上方，「AI 技能」右边那枚）─────────────────
+     为什么要有它：这些技能不少是「macOS 写脚本、Windows 跑不了」的，
+     再不然就是依赖 ffmpeg / sips / 剪映 这类有明显平台差异的东西 ——
+     用户扫一眼落地页就想知道「我这台机器能不能用」。这是**操作系统**兼容性，
+     与「能装在哪家 agent」（Claude Code / Cursor…）是两码事，后者仍不进标签。 */
+  var OS_LABEL = {
+    "mac-windows": { zh: "macOS / Windows", en: "macOS / Windows" },
+    "macos":       { zh: "仅 macOS",        en: "macOS only" },
+    "windows":     { zh: "仅 Windows",      en: "Windows only" },
+    "linux":       { zh: "仅 Linux",        en: "Linux only" },
+    "all":         { zh: "全平台",          en: "All platforms" }
+  };
+
+  function renderPlatformBadge(lang) {
+    var host = qs("#hero-os");
+    if (!host) {
+      /* 老页面：骨架里还没有这枚 badge（模板升级了、但那个页面的 index.html 没跟着换）。
+         就地补一个 —— 这样「只同步 app.js / style.css」就能拿到平台标签，
+         不用去动人家已经改过 meta 与品牌名的 index.html。 */
+      var first = qs(".hero .badge");
+      if (!first || !first.parentNode) return;
+      var row = first.parentNode;
+      if (!row.classList || !row.classList.contains("hero-kicker")) {
+        row = document.createElement("div");
+        row.className = "hero-kicker";
+        first.parentNode.insertBefore(row, first);
+        row.appendChild(first);
+      }
+      host = document.createElement("span");
+      host.className = "badge badge-os";
+      host.id = "hero-os";
+      host.hidden = true;
+      row.appendChild(host);
+    }
+    var p = P.platform, text = "";
+    if (p && typeof p === "object") {
+      text = slotText(p, lang);                       // { zh, en } 自定义
+    } else if (p) {
+      var hit = OS_LABEL[p];
+      text = hit ? (hit[lang] || hit.zh) : String(p); // 未知键原样显示，便于作者自查
+    }
+    if (!text) { host.hidden = true; host.innerHTML = ""; return; }  // 不配 = 不显示
+    var ic = (window.PROMO_ICONS || {}).monitor || "";
+    host.innerHTML = ic + "<span></span>";
+    host.querySelector("span").textContent = text;
+    host.setAttribute("title", (lang === "en" ? "Verified on " : "已在以下系统验证：") + text);
+    host.hidden = false;
+  }
+
   function render(lang) {
     var dict = (P.lang && (P.lang[lang] || P.lang.zh)) || {};
     UI = {
@@ -303,6 +431,7 @@
       failed: uiText(dict, "failed", "复制失败")
     };
     applyText(dict);
+    renderPlatformBadge(lang);
     renderTerminal((dict.terminal || {}).title, (dict.terminal || {}).lines);
     renderStats(dict.stats);
     renderCompare(dict.compare);
@@ -310,6 +439,8 @@
     renderShowcase(dict.showcase);
     renderSteps(dict.steps, lang);
     renderFaq(dict.faq);
+    LANG = lang;
+    renderSlots(lang); /* 槽位跟着语言重渲染（iframe 只推消息、不重载） */
     paintCopyTargets(lang);
     html.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
     if (dict.meta) {

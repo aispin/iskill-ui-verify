@@ -8,6 +8,14 @@ window.PROMO = {
   brand2: "#22d3ee",
   repo: "https://github.com/aispin/iskill-ui-verify",
   repoLabel: "aispin/iskill-ui-verify",
+
+  /* ── 平台兼容性标签（Hero「AI 技能」右边那枚）───────────────────────────
+   * 取值 "mac-windows" | "macos" | "windows" | "linux" | "all" | "" | {zh,en}
+   * 判据：跑 sips/osascript/open/lsof//opt/homebrew 硬路径 = 仅 macOS；
+   *       有 .ps1/taskkill/win32 分支 = 支持 Windows；纯提示词或纯 Node/Python = all。
+   * 标错比不写更糟。详见 promo-page/references/design-guide.md §十。
+   */
+  platform: "all",
   lang: {
     /* ── 中文 ───────────────────────────────────────────────────────── */
     zh: {

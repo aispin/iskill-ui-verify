@@ -12,12 +12,17 @@
  *                [--matrix "theme=light,dark"] [--matrix "lang=zh,en"] ...
  *                [--select <CSS>]... [--full]
  *                [--width 1180] [--height 940] [--scale 2] [--wait 2500]
- *                [--headed] [--json]
+ *                [--session NAME] [--headed] [--json]
  *
  *   ui.mjs check --url <URL> [--case "名称=JS表达式"]... [--json]
- *                [--wait 2500] [--width] [--height] [--scale] [--headed]
+ *                [--wait 2500] [--width] [--height] [--scale]
+ *                [--session NAME] [--headed]
  *
  * 退出码：0 全部成功 / 1 有失败 / 2 参数或环境错误
+ *
+ * 会话名：默认按「子命令 + 端口/主机 + 进程号 + 时间戳」派生，多次/并发运行
+ * 互不干扰（早前硬编码 session 会互相抢同一个浏览器会话，实测会把别的页面
+ * 的标题读成断言结果）。需要固定会话时用 --session 显式指定。
  */
 
 import { spawnSync } from "node:child_process";
@@ -109,6 +114,28 @@ function slug(s) {
   return String(s).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "x";
 }
 
+/**
+ * 派生一个本次运行独占的 agent-browser 会话名。
+ *
+ * 为什么不能写死（2026-10-02 实锤）：并发/连续跑两个 ui.mjs 会用同一个会话，
+ * 浏览器里只留最后一次 open 的页面 —— en 断言读到的是别的技能的标题，
+ * 结果「看起来全绿」但完全是错的。带上端口/主机 + 进程号 + 时间戳即可隔离。
+ */
+function sessionName(args, kind) {
+  if (typeof args.session === "string" && args.session && args.session !== true) {
+    return slug(args.session);
+  }
+  let tag = "";
+  try {
+    const u = new URL(String(args.url));
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "::1";
+    tag = local ? u.port || (u.protocol === "https:" ? "443" : "80") : u.hostname;
+  } catch {
+    tag = "";
+  }
+  return slug(`ui-${kind}-${tag}-${process.pid}-${Date.now().toString(36)}`);
+}
+
 function bytes(file) {
   try {
     return statSync(file).size;
@@ -165,7 +192,7 @@ function cmdShots(args) {
 
   mkdirSync(outDir, { recursive: true });
 
-  const session = "ui-verify-shots";
+  const session = sessionName(args, "shots");
   const rows = [];
   const urls = new Set();
 
@@ -318,12 +345,13 @@ function cmdCheck(args) {
     ...cases.map((c) => ["eval", c.js]),
   ];
 
+  const session = sessionName(args, "check");
   let results;
   try {
-    results = batch(cmds, "ui-verify-check");
+    results = batch(cmds, session);
   } finally {
     try {
-      batch([["close", "--all"]], "ui-verify-check");
+      batch([["close", "--all"]], session);
     } catch {
       /* ignore */
     }
@@ -370,8 +398,8 @@ const sub = argv[0];
 if (!sub || sub === "--help" || sub === "-h") {
   console.log(
     "用法：\n" +
-      "  ui.mjs shots --url URL [--out DIR] [--matrix \"theme=light,dark\"] [--select CSS] [--full] [--json]\n" +
-      "  ui.mjs check --url URL --case \"名称=JS表达式\" [--json]\n"
+      "  ui.mjs shots --url URL [--out DIR] [--matrix \"theme=light,dark\"] [--select CSS] [--full] [--session NAME] [--json]\n" +
+      "  ui.mjs check --url URL --case \"名称=JS表达式\" [--session NAME] [--json]\n"
   );
   process.exit(0);
 }

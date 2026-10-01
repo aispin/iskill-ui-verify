@@ -224,6 +224,13 @@ h2.sec-title { font-size: clamp(26px, 3.4vw, 38px); }
   color: var(--ink-2); border: 1px solid var(--line-strong); background: var(--panel);
 }
 .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 22%, transparent); }
+/* Hero 标题上方的标签行：「AI 技能」+（可选）平台兼容性 */
+.hero-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
+.hero-kicker .badge { margin-bottom: 0; }
+/* 平台兼容性标签：用图标代替那个发光圆点，并稍微弱化（它是次要信息） */
+.badge-os { gap: 6px; color: var(--ink-3); }
+.badge-os svg { width: 14px; height: 14px; color: var(--brand); flex: none; }
+.badge-os[hidden] { display: none; }
 h1.hero-title { font-size: clamp(34px, 5.4vw, 58px); font-weight: 800; letter-spacing: -0.035em; }
 .hero-title .accent {
   background: linear-gradient(120deg, var(--brand) 8%, var(--brand2) 92%);
@@ -234,6 +241,33 @@ h1.hero-title { font-size: clamp(34px, 5.4vw, 58px); font-weight: 800; letter-sp
 .hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 22px; font-size: 13px; color: var(--ink-3); }
 .hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
 .hero-meta svg { width: 14px; height: 14px; color: var(--ok); }
+
+/* ── 槽位（可插拔扩展点） ────────────────────────────────────────────────
+   骨架里 <div class="slot" data-slot="名字">，content.js 的 slots[名字] 决定内容。
+   关键约定：**没配置就什么都没有** —— 元素为空时 :empty 命中 display:none，
+   连网格行都不会生成，所以老页面加了这个锚点也是零变化。
+   ─────────────────────────────────────────────────────────────────────── */
+.slot { grid-column: 1 / -1; min-width: 0; }
+.slot:empty { display: none; }
+
+/* iframe 形态：高度由 content.js 的 height 决定（CSS 变量 --slot-h），
+   窄屏再压一道，免得在手机上占掉整屏。 */
+.slot-frame {
+  display: block; width: 100%; height: var(--slot-h, 640px);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-solid); box-shadow: var(--shadow);
+}
+/* html 形态：一段内联内容，按正文排版 */
+.slot-html { font-size: 15px; color: var(--ink-2); }
+.slot-html p + p { margin-top: 10px; }
+.slot-html a { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+.slot-html code {
+  font-size: 0.9em; padding: 2px 6px; border-radius: 6px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--ink);
+}
+@media (max-width: 720px) {
+  .slot-frame { height: min(var(--slot-h, 640px), 68vh); }
+}
 
 /* 终端窗 */
 .term {
