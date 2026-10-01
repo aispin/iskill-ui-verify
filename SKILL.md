@@ -91,8 +91,8 @@ $N $S shots --url http://127.0.0.1:3000 --out /tmp/ui-shots --name mobile \
 ```
 
 - `--matrix key=v1,v2` 可以给多个，做**笛卡尔积**；除 `media` 外都拼到 **URL 查询参数**（所以页面要支持 `?theme=`/`?lang=` 这类开关），`media` 走浏览器媒体模拟。
-- `--select <CSS>` 可重复；不传就是整屏，配 `--full` 是全长。
-- 输出一张表：`✓ 变体名 <选择器> 文件路径 体积`，`✗` 直接给失败原因。有失败退出码 1。
+- `--select <CSS>` 可重复；不传就是整屏，配 `--full` 是全长。**脚本会自动把视口撑高到能容纳目标元素**（元素截图只在视口内才正确，见踩坑表），并在取图前把懒加载图片顶成 eager。
+- 输出一张表：`✓ 变体名 <选择器> 文件路径 体积`，`✗` 给失败原因，`⚠` 表示**体积异常小、疑似空白**（帮你抓"命令成功但图是空的"）。有失败退出码 1。
 - `--json` 出机器可读结果。产物默认落 `/tmp/ui-shots`。
 
 ### `check`：断言批
@@ -127,6 +127,9 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 | `Unknown command: [open,...]` | 把 JSON 数组当 batch 位置参数了 → 改 stdin（见上） |
 | `--session` 不生效 | 全局选项要放在**子命令之前**：`$AB --session x open ...` |
 | 截图裁到错误的元素 | `screenshot <sel>` 命中多个时取**第一个** → 换更精确的选择器（`:nth-of-type(2)`、`#id`） |
+| **元素截图截出一片纯背景（命令却返回成功）** | `screenshot <sel>` 内部按**页面坐标**下 clip 但没开 `captureBeyondViewport` → **目标必须在当前视口内**。实测：视口 1180×3200 正常 109 KB，视口 1180×940（元素在视口外）得到 5 KB 纯背景图，且**先 `scrollintoview` 也救不回来**。`ui.mjs --select` 已自动量高度、撑视口、再截；手写 batch 时要自己先 `set viewport w <够高>` |
+| 图里那块区域是空的 | 图片 `loading="lazy"` 在截图那刻还没加载，元素盒子还是「没图时」的高度 → 截图前先 `eval` 把 `img[loading=lazy]` 改成 `eager` 并等 900ms |
+| 整页截图下半部分是空白 | 页面有滚动入场动画（`.reveal{opacity:0}`），没滚到的区块透明 → 给页面加个 `?reveal=all` 之类的直达参数，或把视口撑到能覆盖全页 |
 | 点击没反应 | 交互前先 `snapshot -i` 拿 `@eN` 引用，别猜选择器；元素在视口外时先 `scrollintoview` |
 | 读剪贴板报 `NotAllowedError` | 权限要授到**浏览器级** target（裸 CDP 场景），用 agent-browser 的 `clipboard read` 可绕开 |
 | 页面还没渲染完就截 | 用 `wait --load networkidle` 或 `wait <selector>`，别只 `wait <ms>` |

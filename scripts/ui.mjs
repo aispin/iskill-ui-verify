@@ -58,7 +58,7 @@ if (!AB) {
 }
 
 /** 跑一批 agent-browser 命令，返回逐条结果。 */
-function batch(cmds, { session = "ui-verify" } = {}) {
+function batch(cmds, session) {
   const r = spawnSync(AB, ["--session", session, "batch", "--json"], {
     input: JSON.stringify(cmds),
     encoding: "utf8",
@@ -109,15 +109,31 @@ function slug(s) {
   return String(s).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "x";
 }
 
-function kb(file) {
+function bytes(file) {
   try {
-    return Math.round(statSync(file).size / 1024) + " KB";
+    return statSync(file).size;
   } catch {
-    return "缺失";
+    return 0;
   }
 }
+function kb(n) {
+  return Math.round(n / 1024) + " KB";
+}
+
+/** 一屏内的最小体积：低于它基本可以断定是空白图（纯背景色压得极小）。 */
+const BLANK_BYTES = 1400;
 
 // ─────────────────────────────── shots ───────────────────────────────
+
+/** 量出这些选择器在文档里的最大底边（用于把视口撑到够高）。 */
+function measureExpr(selectors) {
+  return (
+    "(()=>{const sels=" +
+    JSON.stringify(selectors) +
+    ";let b=0;for(const s of sels){const e=document.querySelector(s);" +
+    "if(e){const r=e.getBoundingClientRect();b=Math.max(b,r.bottom)}}return Math.ceil(b)})()"
+  );
+}
 
 function cmdShots(args) {
   const url = args.url;
@@ -149,77 +165,127 @@ function cmdShots(args) {
 
   mkdirSync(outDir, { recursive: true });
 
-  const cmds = [];
-  const plan = []; // 与 cmds 等长，标记哪条是截图、产出到哪
+  const session = "ui-verify-shots";
+  const rows = [];
+  const urls = new Set();
 
-  for (const dimset of variants) {
-    const u = new URL(url);
-    let media = null;
-    for (const d of dimset) {
-      if (d.key === "media") media = d.value;
-      else u.searchParams.set(d.key, d.value);
+  try {
+    for (const dimset of variants) {
+      const u = new URL(url);
+      let media = null;
+      for (const d of dimset) {
+        if (d.key === "media") media = d.value;
+        else u.searchParams.set(d.key, d.value);
+      }
+      urls.add(u.toString());
+      const label = dimset.length
+        ? dimset.map((d) => `${d.key}-${slug(d.value)}`).join("_")
+        : "default";
+
+      const setup = [headed ? ["open", u.toString(), "--headed"] : ["open", u.toString()]];
+      setup.push(["set", "viewport", String(width), String(height), String(scale)]);
+      if (media) setup.push(["set", "media", media]);
+      setup.push(["wait", String(waitMs)]);
+      // 懒加载图片会让元素盒子在截图那一刻还是「没图时」的高度 —— 先顶成 eager 再等它加载。
+      if (full || selects.length) {
+        setup.push([
+          "eval",
+          "(()=>{document.querySelectorAll('img[loading=lazy]').forEach(i=>{i.loading='eager'});return document.images.length})()",
+        ]);
+        setup.push(["wait", "900"]);
+      }
+      // 元素截图必须先让目标落进视口 —— 否则 Chrome 会截到一片空白（见文件尾注释）
+      if (selects.length) setup.push(["eval", measureExpr(selects)]);
+
+      const sres = batch(setup, session);
+      const bad = sres.findIndex((r) => !r.success);
+      if (bad >= 0) {
+        rows.push({
+          label,
+          sel: null,
+          file: "—",
+          ok: false,
+          error:
+            "第 " + (bad + 1) + " 步失败：" +
+            JSON.stringify((sres[bad] || {}).error || {}).slice(0, 140),
+        });
+        continue;
+      }
+
+      // 视口不够高就把高度撑到能容纳目标元素（宽度不动，响应式断点不受影响）
+      if (selects.length) {
+        const last = sres[sres.length - 1];
+        const bottom = Number((last.result && last.result.result) || 0);
+        if (bottom > height) {
+          const grown = Math.ceil(bottom) + 40;
+          batch([["set", "viewport", String(width), String(grown), String(scale)], ["wait", "700"]], session);
+        }
+      }
+
+      const shots = selects.length ? selects : [null];
+      const cmds = [];
+      for (const sel of shots) {
+        const file = join(outDir, `${prefix}-${label}${sel ? "-" + slug(sel) : ""}.png`);
+        cmds.push(
+          sel
+            ? full
+              ? ["screenshot", sel, "--full", file]
+              : ["screenshot", sel, file]
+            : full
+              ? ["screenshot", "--full", file]
+              : ["screenshot", file]
+        );
+      }
+      const rres = batch(cmds, session);
+
+      cmds.forEach((c, i) => {
+        const file = c[c.length - 1];
+        const r = rres[i] || {};
+        const size = bytes(file);
+        const ok = !!r.success && size > 0;
+        rows.push({
+          label,
+          sel: shots[i],
+          file,
+          size,
+          ok,
+          blank: ok && size < BLANK_BYTES,
+          error: r.error ? JSON.stringify(r.error).slice(0, 160) : ok ? null : "未产出文件",
+        });
+      });
     }
-    const label = dimset.length ? dimset.map((d) => `${d.key}-${slug(d.value)}`).join("_") : "default";
-
-    cmds.push(headed ? ["open", u.toString(), "--headed"] : ["open", u.toString()]);
-    plan.push(null);
-    cmds.push(["set", "viewport", String(width), String(height), String(scale)]);
-    plan.push(null);
-    if (media) {
-      cmds.push(["set", "media", media]);
-      plan.push(null);
-    }
-    cmds.push(["wait", String(waitMs)]);
-    plan.push(null);
-
-    const shots = selects.length ? selects : [null];
-    for (const sel of shots) {
-      const file = join(outDir, `${prefix}-${label}${sel ? "-" + slug(sel) : ""}.png`);
-      cmds.push(
-        sel
-          ? full
-            ? ["screenshot", sel, "--full", file]
-            : ["screenshot", sel, file]
-          : full
-            ? ["screenshot", "--full", file]
-            : ["screenshot", file]
-      );
-      plan.push({ label, sel, file });
+  } finally {
+    try {
+      batch([["close", "--all"]], session);
+    } catch {
+      /* 收尾失败不覆盖真实错误 */
     }
   }
-  cmds.push(["close", "--all"]);
-  plan.push(null);
 
-  const results = batch(cmds);
-
-  const rows = [];
-  let failed = 0;
-  cmds.forEach((c, i) => {
-    const p = plan[i];
-    if (!p) return;
-    const r = results[i] || {};
-    const ok = !!r.success && existsSync(p.file) && statSync(p.file).size > 0;
-    if (!ok) failed++;
-    rows.push({ ...p, ok, error: r.error ? JSON.stringify(r.error).slice(0, 160) : null });
-  });
+  const failed = rows.filter((r) => !r.ok).length;
+  const blanks = rows.filter((r) => r.blank).length;
 
   if (args.json) {
     console.log(JSON.stringify({ out: outDir, shots: rows }, null, 2));
   } else {
-    const urls = new Set();
-    for (const dimset of variants) {
-      const u = new URL(url);
-      for (const d of dimset) if (d.key !== "media") u.searchParams.set(d.key, d.value);
-      urls.add(u.toString());
-    }
-    console.log(`产出目录 ${outDir}  ·  ${variants.length} 变体 × ${selects.length || 1} 目标  ·  ${width}×${height}@${scale}x${full ? " full" : ""}`);
+    console.log(
+      `产出目录 ${outDir}  ·  ${variants.length} 变体 × ${selects.length || 1} 目标  ·  ${width}×${height}@${scale}x${full ? " full" : ""}`
+    );
     for (const r of rows) {
+      const flag = !r.ok ? "✗" : r.blank ? "⚠" : "✓";
       console.log(
-        `${r.ok ? "✓" : "✗"} ${r.label.padEnd(28)} ${r.sel ? "<" + r.sel + "> " : ""}${r.file}` +
-          (r.ok ? `  ${kb(r.file)}` : `  ${r.error || "未产出文件"}`)
+        `${flag} ${r.label.padEnd(28)} ${r.sel ? "<" + r.sel + "> " : ""}${r.file}` +
+          (r.ok ? `  ${kb(r.size)}` : `  ${r.error}`) +
+          (r.blank ? "  ← 体积异常小，疑似空白" : "")
       );
     }
     if (urls.size) console.log("URL：" + [...urls].join("  "));
+    if (blanks) {
+      console.log(
+        `⚠ 有 ${blanks} 张疑似空白。常见原因：目标元素在视口外（本脚本已自动撑高视口）、` +
+          `页面用了滚动入场动画（加 ?reveal=all 之类的直达参数）、或选择器命中了空容器。`
+      );
+    }
   }
 
   return failed ? 1 : 0;
@@ -250,10 +316,18 @@ function cmdCheck(args) {
     ["wait", String(waitMs)],
     ["eval", "document.title || '(无标题)'"],
     ...cases.map((c) => ["eval", c.js]),
-    ["close", "--all"],
   ];
 
-  const results = batch(cmds);
+  let results;
+  try {
+    results = batch(cmds, "ui-verify-check");
+  } finally {
+    try {
+      batch([["close", "--all"]], "ui-verify-check");
+    } catch {
+      /* ignore */
+    }
+  }
 
   const titleR = results[3] || {};
   if (!titleR.success) {
@@ -266,11 +340,10 @@ function cmdCheck(args) {
   const rows = cases.map((c, i) => {
     const r = results[4 + i] || {};
     const value = r.success ? (r.result && r.result.result) : undefined;
-    const pass = r.success && !!value;
     return {
       name: c.name,
-      pass,
-      value: pass ? value : value,
+      pass: !!(r.success && value),
+      value,
       error: r.error ? JSON.stringify(r.error).slice(0, 160) : null,
     };
   });
@@ -281,7 +354,8 @@ function cmdCheck(args) {
   } else {
     console.log(`页面：${title}  ·  ${url}`);
     for (const r of rows) {
-      const shown = r.value === undefined ? r.error || "(无返回值)" : JSON.stringify(r.value).slice(0, 120);
+      const shown =
+        r.value === undefined ? r.error || "(无返回值)" : JSON.stringify(r.value).slice(0, 120);
       console.log(`${r.pass ? "✓" : "✗"} ${r.name.padEnd(30)} ${shown}`);
     }
     console.log(`${rows.length - failed}/${rows.length} 通过`);
@@ -313,3 +387,17 @@ try {
   code = 2;
 }
 process.exit(code);
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * 为什么要「先把视口撑高再截元素」（实测，2026-10-01）
+ *
+ * agent-browser 的 `screenshot <selector>` 内部把元素的**页面坐标**当作 clip
+ * 传给 Chrome，但没有开 captureBeyondViewport。于是：
+ *   视口 1180×3200（元素在视口内）→ 正常，109 KB
+ *   视口 1180×940 （元素在视口外）→ 一张纯背景图，5 KB，而且**命令返回成功**
+ * 先 scrollintoview 再截也没用（仍是 5 KB）。
+ *
+ * 所以本脚本在带 --select 时会先 eval 量出目标的最大底边，把视口高度撑到
+ * 能容纳它（宽度不变，响应式断点不受影响），等 700ms 让滚动入场动画跑完，
+ * 再截图；同时对体积异常小的产物打 ⚠ 提示，避免"静默拿到空白图"。
+ * ───────────────────────────────────────────────────────────────────────── */
