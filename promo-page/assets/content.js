@@ -97,27 +97,14 @@ window.PROMO = {
       steps: {
         eyebrow: "上手",
         title: "三步跑起来",
-        sub: "",
+        sub: "截图矩阵与断言批都是它封装好的；你只说要看什么。",
         items: [
-          {
-            title: "交给 AI 装",
-            desc: "把提示词粘进对话框，agent 会自己拉代码、读文档，再告诉你怎么跑。",
-            codeKey: "install"
-          },
-          {
-            title: "跑一次矩阵截图",
-            desc: "中英 × 明暗四个变体，一条命令出四张图。",
-            codeName: "bash",
-            code: 'node scripts/ui.mjs shots --url http://127.0.0.1:3000/ --out /tmp/ui-shots \\\n  --matrix "theme=light,dark" --matrix "lang=zh,en"'
-          },
-          {
-            title: "上断言，让它判对错",
-            desc: "截图看观感，行为对错交给 check；退出码可直接接 CI。",
-            codeName: "bash",
-            code: 'node scripts/ui.mjs check --url http://127.0.0.1:3000/ \\\n  --case "标题含控制台=document.title.includes(\'控制台\')" \\\n  --case "无明文泄漏=!/sk-wb-[A-Za-z0-9]{28,}/.test(document.documentElement.outerHTML)"'
-          }
+          { title: "交给 AI 装", desc: "把这句话粘进对话框，agent 会自己拉代码、读文档，再告诉你用法。", codeKey: "install" },
+          { title: "说要看什么", desc: "矩阵截图和断言批已经封装好；你只管描述要看的页面和维度。", codeName: "prompt", code: "截几张图看看这个页面改完的效果，中英 × 明暗都来一遍，再断言下有没有横向滚动。" },
+          { title: "看截图和断言结果", desc: "截图落在输出目录，断言直接回 PASS/FAIL；哪张不对说一声，它改完重截。" }
         ]
       },
+
 
       faq: {
         eyebrow: "问答",
@@ -220,27 +207,14 @@ window.PROMO = {
       steps: {
         eyebrow: "Get started",
         title: "Up and running in three steps",
-        sub: "",
+        sub: "Shot matrices and assertion batches are already packaged — you just say what to look at.",
         items: [
-          {
-            title: "Let your agent install it",
-            desc: "Paste the line into the chat — it clones the repo, reads the docs, and tells you how to run it.",
-            codeKey: "install"
-          },
-          {
-            title: "Take the matrix",
-            desc: "Four variants — zh/en × light/dark — in a single command.",
-            codeName: "bash",
-            code: 'node scripts/ui.mjs shots --url http://127.0.0.1:3000/ --out /tmp/ui-shots \\\n  --matrix "theme=light,dark" --matrix "lang=zh,en"'
-          },
-          {
-            title: "Add assertions",
-            desc: "Screenshots judge looks; check judges behaviour. The exit code wires into CI.",
-            codeName: "bash",
-            code: 'node scripts/ui.mjs check --url http://127.0.0.1:3000/ \\\n  --case "title=document.title.includes(\'Dashboard\')" \\\n  --case "no plaintext leak=!/sk-wb-[A-Za-z0-9]{28,}/.test(document.documentElement.outerHTML)"'
-          }
+          { title: "Let your agent install it", desc: "Paste the line into the chat — it clones the repo, reads the docs, and tells you how to use it.", codeKey: "install" },
+          { title: "Say what you want to see", desc: "Matrix shots and assertion batches are packaged already — just describe the page and the dimensions.", codeName: "prompt", code: "Screenshot this page after the changes — Chinese and English, light and dark — and assert there's no horizontal scroll." },
+          { title: "Check the shots and assertions", desc: "Screenshots land in the output dir; assertions come back PASS/FAIL. Say which one is wrong and it re-shoots after fixing." }
         ]
       },
+
 
       faq: {
         eyebrow: "FAQ",
