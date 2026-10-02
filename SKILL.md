@@ -158,6 +158,14 @@ $N $S check --url "http://127.0.0.1:8786/?theme=dark&lang=zh" --wait 2500 \
 > 而直接 `execFileSync('…/Google Chrome')` 会被沙箱把**整棵进程树**一起回收
 > （退出码 137，宿主脚本连 `catch` 都没机会跑）。所以凡是「文档/验收脚本自己起浏览器」，
 > 要么直接用它，要么**在起进程之前就判断**该走哪条路，别指望运行时兜底。
+>
+> **真绕过 agent-browser、自己 exec Chromium 截图时，两个「看着更健壮、实际是负优化」的旗标**（2026-10-02 实测，Chrome 154 for Testing / macOS）：
+> ① 别加 `--user-data-dir=<临时目录>` —— 截完**不退出**、进程挂死（同命令单跑 >7min 只能 kill）；
+> 不加 profile 的裸 `--headless --disable-gpu` 反而稳（只有无害的 CVDisplayLink 警告）。
+> ② 别优先 `--headless=new` —— 这部分 Chrome 上 GPU 进程直接 FATAL
+> （`gpu_data_manager_impl_private.cc:417 GPU process isn't usable`，exit 6）。
+> 稳的写法：`for flag in (\"--headless\", \"--headless=new\")` 先裸后新、且**永远不带 profile**。
+> （注：「受限沙箱里 Chrome 建不了默认 profile 而 SIGTRAP」是**另一种环境**的老坑，那种情况才需要显式 profile —— 两说并存，别一律套用。）
 
 ---
 
