@@ -39,16 +39,19 @@ window.PROMO = {
         meta2: "默认 headless",
         meta3: "MIT 许可"
       },
-      terminal: {
-        title: "zsh — iskill-ui-verify",
-        lines: [
-          [{ t: "$ ", c: "p" }, { t: "node scripts/ui.mjs shots --url http://127.0.0.1:8786/", c: "k" }],
-          [{ t: "    --matrix theme=light,dark --matrix lang=zh,en --select section", c: "k" }],
-          [{ t: "产出目录 /tmp/ui-shots · 4 变体 × 1 目标 · 1180×940@2x", c: "c" }],
-          [{ t: "✓ theme-light_lang-zh  <section>  43 KB", c: "s" }],
-          [{ t: "✓ theme-dark_lang-en   <section>  41 KB", c: "s" }]
+      chat: {
+        title: "AI Agent · 对话现场",
+        status: "在线",
+        userLabel: "你",
+        agentLabel: "AI",
+        messages: [
+          { role: "user", text: "截几张图看看这个页面改完的效果" },
+          { role: "agent", text: "起无头 Chromium 批量截：中英 × 明暗矩阵一次跑完；也能上断言判对错——横向滚动 / 元素溢出 / 盒子被撑高三类分开断言。", tag: "已读 踩坑清单" },
+          { role: "user", text: "刚才那张是空白的" },
+          { role: "agent", text: "折叠线下的元素要先滚到位再操作——「返回成功」不等于真的做了，这类断言我都会先量 getBoundingClientRect 复核。" }
         ]
       },
+
 
       stats: [
         { value: "135 → 1", label: "行 CDP 样板变成一行命令", note: "手写一次约 1.5k tokens" },
@@ -149,16 +152,19 @@ window.PROMO = {
         meta2: "Headless by default",
         meta3: "MIT licensed"
       },
-      terminal: {
-        title: "zsh — iskill-ui-verify",
-        lines: [
-          [{ t: "$ ", c: "p" }, { t: "node scripts/ui.mjs shots --url http://127.0.0.1:8786/", c: "k" }],
-          [{ t: "    --matrix theme=light,dark --matrix lang=zh,en --select section", c: "k" }],
-          [{ t: "out /tmp/ui-shots · 4 variants × 1 target · 1180×940@2x", c: "c" }],
-          [{ t: "✓ theme-light_lang-zh  <section>  43 KB", c: "s" }],
-          [{ t: "✓ theme-dark_lang-en   <section>  41 KB", c: "s" }]
+      chat: {
+        title: "AI Agent · live session",
+        status: "online",
+        userLabel: "You",
+        agentLabel: "AI",
+        messages: [
+          { role: "user", text: "Screenshot this page so I can see what changed" },
+          { role: "agent", text: "Headless Chromium, batch mode: Chinese × English, light × dark in one run. Or use assertions instead — horizontal scroll, element overflow and stretched boxes are checked separately.", tag: "read pitfalls" },
+          { role: "user", text: "The last one came out blank" },
+          { role: "agent", text: "Elements below the fold must be scrolled into view first — \"returned success\" doesn't mean it happened. For those I always measure getBoundingClientRect to confirm." }
         ]
       },
+
 
       stats: [
         { value: "135 → 1", label: "lines of CDP boilerplate, gone", note: "~1.5k tokens written per attempt" },
